@@ -1,0 +1,143 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  /* Spec Custom Colors */
+  --color-bg-canvas: var(--bg-canvas);
+  --color-bg-surface: var(--bg-surface);
+  --color-bg-surface-raised: var(--bg-surface-raised);
+  --color-border-hairline: var(--border-hairline);
+  --color-status-nominal: var(--status-nominal);
+  --color-status-warning: var(--status-warning);
+  --color-status-critical: var(--status-critical);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.5);
+}
+
+:root {
+  /* "Skyline Day" Light Theme */
+  --background: #F3F9FD;
+  --bg-canvas: #F3F9FD;
+  --card: #FFFFFF;
+  --bg-surface: #FFFFFF;
+  --bg-surface-raised: #EAF4FC;
+  --popover: #FFFFFF;
+  --foreground: #0B1F33;
+  --popover-foreground: #0B1F33;
+  --card-foreground: #0B1F33;
+  
+  --primary: #1E9CD4;
+  --primary-foreground: #FFFFFF;
+  --secondary: #FF7A45;
+  --secondary-foreground: #FFFFFF;
+  
+  --muted: #8AA0B2;
+  --muted-foreground: #4C6478;
+  --accent: #EAF4FC;
+  --accent-foreground: #1E9CD4;
+  
+  --destructive: #DC2626;
+  --destructive-foreground: #FFFFFF;
+  
+  --border: #D6E6F2;
+  --border-hairline: #D6E6F2;
+  --input: #D6E6F2;
+  --ring: #1E9CD4;
+  
+  --status-nominal: #16A34A;
+  --status-warning: #D97706;
+  --status-critical: #DC2626;
+
+  --chart-1: #1E9CD4;
+  --chart-2: #FF7A45;
+  --chart-3: #7C6FE0;
+  --chart-4: #16A34A;
+  --chart-5: #0B1F33;
+
+  --radius: 0.25rem; /* Blocky/instrument panel look usually has smaller radius or 0 */
+}
+
+.dark {
+  /* "Glass Cockpit" Dark Theme */
+  --background: #0B0F14;
+  --bg-canvas: #0B0F14;
+  --card: #121821;
+  --bg-surface: #121821;
+  --bg-surface-raised: #1A222D;
+  --popover: #121821;
+  
+  --foreground: #E7EDF3;
+  --popover-foreground: #E7EDF3;
+  --card-foreground: #E7EDF3;
+  
+  --primary: #22D3EE;
+  --primary-foreground: #0B0F14;
+  --secondary: #F5A623;
+  --secondary-foreground: #0B0F14;
+  
+  --muted: #5B6B79;
+  --muted-foreground: #93A2B0;
+  --accent: #1A222D;
+  --accent-foreground: #22D3EE;
+  
+  --destructive: #F5455C;
+  --destructive-foreground: #E7EDF3;
+  
+  --border: #26313D;
+  --border-hairline: #26313D;
+  --input: #26313D;
+  --ring: #22D3EE;
+  
+  --status-nominal: #34D399;
+  --status-warning: #F5A623;
+  --status-critical: #F5455C;
+
+  --chart-1: #22D3EE;
+  --chart-2: #F5A623;
+  --chart-3: #A78BFA;
+  --chart-4: #34D399;
+  --chart-5: #E7EDF3;
+}
+
+@layer base {
+  * {
+    @apply border-border-hairline; /* Ensure grid stays visible with hairline border */
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+}

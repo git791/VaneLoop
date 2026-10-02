@@ -17,3 +17,6 @@ data/raw/
 # Benchmarks/Logs
 benchmarks/results/
 logs/
+
+# ML Artifacts
+ml/artifacts/

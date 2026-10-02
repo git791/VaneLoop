@@ -24,7 +24,7 @@ def detect_dataset_from_filename(filename: str) -> str:
     # Example: 'train_FD001.txt' → 'FD001'
     parts = filename.split('_')
     return parts[1].split('.')[0]
-def generate_insert_statements(df: pd.DataFrame) -> List[Dict[str, Any]]:
+def generate_insert_statements(df: pd.DataFrame, filepath: str) -> List[Dict[str, Any]]:
     """Convert dataframe rows to dicts for ingestion."""
     records = []
     dataset = detect_dataset_from_filename(filepath)

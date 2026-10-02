@@ -156,17 +156,16 @@ class CassandraStore:
             self.session.execute(stmt)
         self.session.set_keyspace(self.keyspace)
         self._prepare()
+
         self._ready = True
 
     def _prepare(self) -> None:
         s = self.session
         self._ins_reading = s.prepare(
             f"INSERT INTO engine_readings ({', '.join(READING_COLUMNS)}) "
-            f"VALUES ({', '.join('?' for _ in READING_COLUMNS)})"
         )
         self._ins_sensor = s.prepare(
             "INSERT INTO sensor_readings_by_sensor "
-            "(dataset, sensor, cycle_bucket, cycle, unit, value) VALUES (?, ?, ?, ?, ?, ?)"
         )
         self._sel_readings_before = s.prepare(
             "SELECT * FROM engine_readings WHERE dataset = ? AND unit = ? AND cycle < ? "
@@ -184,7 +183,6 @@ class CassandraStore:
         self._ins_prediction = s.prepare(
             "INSERT INTO engine_predictions "
             "(dataset, unit, cycle, model_version, rul_p10, rul_p50, rul_p90, "
-            "health_index, state, warmup) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         self._sel_predictions = s.prepare(
             "SELECT * FROM engine_predictions WHERE dataset = ? AND unit = ? "
@@ -193,12 +191,10 @@ class CassandraStore:
         self._ins_alert_day = s.prepare(
             "INSERT INTO alerts_by_day "
             "(dataset, day, shard, ts, alert_id, unit, severity, rule, sensor, "
-            "reading, threshold, message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         self._ins_alert_engine = s.prepare(
             "INSERT INTO alerts_by_engine "
             "(dataset, unit, ts, alert_id, severity, rule, message) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)"
         )
         self._sel_alert_day = s.prepare(
             "SELECT * FROM alerts_by_day WHERE dataset = ? AND day = ? AND shard = ? "
@@ -285,9 +281,7 @@ class CassandraStore:
         if before_cycle is None:
             rows = self.session.execute(self._sel_readings_recent, (dataset, unit, limit))
         else:
-            rows = self.session.execute(
-                self._sel_readings_before, (dataset, unit, before_cycle, limit)
-            )
+            rows = self.session.execute(self._sel_readings_before, (dataset, unit, before_cycle, limit))
         return [_reading_row(r) for r in rows]
 
     def get_sensor_fleet_trend(
@@ -309,7 +303,6 @@ class CassandraStore:
     def get_predictions(self, dataset, unit, from_cycle=None, to_cycle=None) -> list[dict[str, Any]]:
         lo = from_cycle if from_cycle is not None else 0
         hi = to_cycle if to_cycle is not None else MAX_CYCLE
-        rows = self.session.execute(self._sel_predictions, (dataset, unit, lo, hi))
         return [_prediction_row(r) for r in rows]
 
     def get_alerts(self, dataset, severity=None, rule=None, unit=None, limit=50) -> list[dict[str, Any]]:
@@ -317,17 +310,14 @@ class CassandraStore:
         day = datetime.now(timezone.utc).date()
         merged: list[dict[str, Any]] = []
         for shard in range(ALERT_SHARDS):
-            rows = self.session.execute(self._sel_alert_day, (dataset, day, shard, limit))
             merged.extend(_alert_day_row(r) for r in rows)
         merged.sort(key=lambda a: a["ts"], reverse=True)
         return _filter_alerts(merged, severity, rule, unit)[:limit]
 
     def get_alerts_for_engine(self, dataset, unit, limit=50) -> list[dict[str, Any]]:
-        rows = self.session.execute(self._sel_alert_engine, (dataset, unit, limit))
         return [_alert_engine_row(r) for r in rows]
 
     def count_engine_rows(self, dataset) -> int:
-        row = self.session.execute(self._count_readings, (dataset,)).one()
         return int(row.n) if row else 0
 
     def close(self) -> None:
@@ -410,7 +400,6 @@ class SQLiteStore:
     def migrate(self, schema_path: str | Path | None = None) -> None:
         with self._lock:
             self.conn.executescript(_SQLITE_SCHEMA)
-            self.conn.commit()
 
     def upsert_readings(self, rows: Iterable[dict[str, Any]]) -> int:
         rows = list(rows)
@@ -418,7 +407,9 @@ class SQLiteStore:
             return 0
         cols = ", ".join(READING_COLUMNS)
         ph = ", ".join("?" for _ in READING_COLUMNS)
-        reading_sql = f"INSERT OR REPLACE INTO engine_readings ({cols}) VALUES ({ph})"
+        reading_sql = (
+            f"INSERT OR REPLACE INTO engine_readings ({cols}) VALUES ({ph})"
+        )
         sensor_sql = (
             "INSERT OR REPLACE INTO sensor_readings_by_sensor "
             "(dataset, sensor, cycle_bucket, cycle, unit, value) VALUES (?, ?, ?, ?, ?, ?)"
@@ -438,7 +429,6 @@ class SQLiteStore:
                     for i in range(1, 22)
                 ],
             )
-            self.conn.commit()
         return len(rows)
 
     def insert_engine_reading(self, reading: dict[str, Any]) -> int:
@@ -451,7 +441,6 @@ class SQLiteStore:
         sql = (
             "INSERT OR REPLACE INTO engine_predictions "
             "(dataset, unit, cycle, model_version, rul_p10, rul_p50, rul_p90, "
-            "health_index, state, warmup) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         args = [
             (
@@ -463,7 +452,6 @@ class SQLiteStore:
         ]
         with self._lock:
             self.conn.executemany(sql, args)
-            self.conn.commit()
         return len(rows)
 
     def write_alerts(self, rows: Iterable[dict[str, Any]]) -> int:
@@ -473,12 +461,10 @@ class SQLiteStore:
         day_sql = (
             "INSERT OR REPLACE INTO alerts_by_day "
             "(dataset, day, shard, ts, alert_id, unit, severity, rule, sensor, "
-            "reading, threshold, message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         eng_sql = (
             "INSERT OR REPLACE INTO alerts_by_engine "
             "(dataset, unit, ts, alert_id, severity, rule, message) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)"
         )
         day_args, eng_args = [], []
         for r in rows:
@@ -496,7 +482,6 @@ class SQLiteStore:
         with self._lock:
             self.conn.executemany(day_sql, day_args)
             self.conn.executemany(eng_sql, eng_args)
-            self.conn.commit()
         return len(rows)
 
     # -- reads -------------------------------------------------------------
@@ -506,26 +491,6 @@ class SQLiteStore:
             sql = (
                 "SELECT * FROM engine_readings WHERE dataset = ? AND unit = ? "
                 "ORDER BY cycle DESC LIMIT ?"
-def store_benchmark_result(result: BenchmarkResult):
-    """Store benchmark results."""
-    if VANELOOP_STORE == 'cassandra':
-        session.execute("""
-        INSERT INTO benchmarks (datetime, dataset, engine_count, total_rows,
-            ingest_time_sec, query_time_sec, memory_mb, cpu_load)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        """, (result.datetime, result.dataset.split(), result.engine_count,
-            result.total_rows, result.ingest_time_sec, result.query_time_sec,
-            result.memory_mb, result.cpu_load))
-    elif VANELOOP_STORE == 'sqlite':
-        conn = get_sqlite_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-        INSERT INTO benchmarks 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (result.datetime, result.dataset, result.engine_count,
-            result.total_rows, result.ingest_time_sec, result.query_time_sec,
-            result.memory_mb, result.cpu_load))
-        conn.commit()
             )
             args: tuple[Any, ...] = (dataset, unit, limit)
         else:

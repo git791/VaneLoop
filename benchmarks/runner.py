@@ -9,7 +9,7 @@ def run_benchmark(store: Store, dataset_file: str):
     
     # Ingest data
     df = parse_cmapss_file(dataset_file)
-    records = generate_insert_statements(df)
+    records = generate_insert_statements(df, dataset_file)
     
     # Simulate ingestion to store
     rows_inserted = store.upsert_readings(records)

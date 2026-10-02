@@ -1,15 +1,17 @@
+"use client"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { useQuery } from "@tanstack/react-query"
+import { fetchAlerts } from "@/lib/api"
 
 export default function AlertsPage() {
-  const mockAlerts = [
-    { engine: "FD001-023", sensor: "T50", reading: 1612.3, threshold: 1600.0, severity: "critical", time: "2m ago" },
-    { engine: "FD001-008", sensor: "P30", reading: 39.8, threshold: 39.5, severity: "warning", time: "15m ago" },
-    { engine: "FD001-042", sensor: "Nf", reading: 2391.1, threshold: 2390.0, severity: "warning", time: "1h ago" },
-    { engine: "FD001-011", sensor: "T24", reading: 645.2, threshold: 644.0, severity: "critical", time: "2h ago" },
-    { engine: "FD001-067", sensor: "T50", reading: 1608.1, threshold: 1600.0, severity: "critical", time: "5h ago" },
-    { engine: "FD001-099", sensor: "P30", reading: 39.6, threshold: 39.5, severity: "warning", time: "6h ago" },
-  ]
+  const { data: alerts = [], isLoading, isError } = useQuery({
+    queryKey: ['alerts'],
+    queryFn: fetchAlerts
+  })
+
+  if (isLoading) return <div className="p-4">Loading alerts...</div>
+  if (isError) return <div className="p-4 text-status-critical">Error loading alerts</div>
 
   return (
     <div className="space-y-6 flex flex-col h-full">
@@ -25,12 +27,12 @@ export default function AlertsPage() {
               <TableHead className="font-mono">Engine</TableHead>
               <TableHead className="font-mono">Sensor</TableHead>
               <TableHead className="font-mono text-right">Reading</TableHead>
-              <TableHead className="font-mono text-right">Threshold</TableHead>
+              <TableHead className="font-mono text-right">Rule</TableHead>
               <TableHead className="text-right">Time</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {mockAlerts.map((alert, i) => (
+            {alerts.map((alert, i) => (
               <TableRow key={i} className={`border-border-hairline hover:bg-bg-surface-raised border-l-4 ${
                 alert.severity === 'critical' ? 'border-l-status-critical' : 'border-l-status-warning'
               }`}>
@@ -46,7 +48,7 @@ export default function AlertsPage() {
                 <TableCell className="font-mono font-medium">{alert.engine}</TableCell>
                 <TableCell className="font-mono text-muted-foreground">{alert.sensor}</TableCell>
                 <TableCell className="font-mono text-right text-foreground">{alert.reading.toFixed(1)}</TableCell>
-                <TableCell className="font-mono text-right text-muted-foreground">{alert.threshold.toFixed(1)}</TableCell>
+                <TableCell className="font-mono text-right text-muted-foreground">{alert.rule}</TableCell>
                 <TableCell className="text-right text-muted-foreground text-sm">{alert.time}</TableCell>
               </TableRow>
             ))}

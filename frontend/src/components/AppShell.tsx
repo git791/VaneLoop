@@ -3,10 +3,14 @@ import { useTheme } from "next-themes"
 import { Moon, Sun, Settings, Search, Activity } from "lucide-react"
 import Link from "next/link"
 import { useEffect, useState } from "react"
+import { useFleetStream } from "@/lib/useFleetStream"
+import { ConnectionBadge } from "@/components/ConnectionBadge"
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { setTheme, theme } = useTheme()
   const [mounted, setMounted] = useState(false)
+  // One shared stream for the whole app shell — dataset can be made dynamic later
+  const { connection } = useFleetStream("FD001")
 
   useEffect(() => {
     setMounted(true)
@@ -21,13 +25,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <span>Aircraft Engine Health</span>
         </div>
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-sm text-status-nominal font-mono">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-status-nominal opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-status-nominal"></span>
-            </span>
-            LIVE
-          </div>
+          {/* Connection badge — replaces the old static "LIVE" badge (G5 fix) */}
+          <ConnectionBadge connection={connection} />
           <button className="text-muted-foreground hover:text-foreground">
             <Search className="h-4 w-4" />
           </button>
@@ -64,6 +63,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
+
+      {/* Footer disclaimer — visible on every page (M-3 requirement) */}
+      <footer className="h-8 flex items-center px-4 border-t border-border-hairline bg-bg-surface text-[11px] text-muted-foreground">
+        ⚠️ Simulated NASA C-MAPSS data only — not for real airworthiness or maintenance decisions.
+      </footer>
     </div>
   )
 }

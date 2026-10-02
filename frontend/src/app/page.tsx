@@ -1,13 +1,18 @@
+"use client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { useQuery } from "@tanstack/react-query"
+import { fetchFleet } from "@/lib/api"
+import Link from "next/link"
 
 export default function FleetOverview() {
-  // Mock data for the training set (FD001)
-  const engines = Array.from({ length: 24 }).map((_, i) => ({
-    id: `FD001-${(i + 1).toString().padStart(3, "0")}`,
-    lastCycle: Math.floor(Math.random() * 200) + 50,
-    status: i % 7 === 0 ? "critical" : i % 4 === 0 ? "warning" : "nominal"
-  }))
+  const { data: engines = [], isLoading, isError } = useQuery({
+    queryKey: ['fleet'],
+    queryFn: fetchFleet
+  })
+
+  if (isLoading) return <div className="p-4">Loading fleet data...</div>
+  if (isError) return <div className="p-4 text-status-critical">Error loading fleet data</div>
 
   const nominalCount = engines.filter(e => e.status === "nominal").length
   const warningCount = engines.filter(e => e.status === "warning").length
@@ -52,7 +57,7 @@ export default function FleetOverview() {
 
       <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
         {engines.map((engine) => (
-          <a
+          <Link
             key={engine.id}
             href={`/engine/${engine.id}`}
             className="group flex flex-col p-4 border border-border-hairline bg-bg-surface hover:bg-bg-surface-raised transition-colors"
@@ -71,7 +76,7 @@ export default function FleetOverview() {
               <div className="text-xs text-muted-foreground mb-1">Cycle</div>
               <div className="font-mono text-lg">{engine.lastCycle}</div>
             </div>
-          </a>
+          </Link>
         ))}
       </div>
     </div>

@@ -178,9 +178,28 @@ class CassandraStore:
         if schema_path is None:
             schema_path = Path(__file__).resolve().parents[2] / "infra" / "cassandra" / "schema.cql"
         cql = Path(schema_path).read_text(encoding="utf-8")
+
+        # In cloud environments like Astra DB, the keyspace is pre-created and USE/CREATE KEYSPACE
+        # might throw Unauthorized errors. Try setting keyspace first.
+        try:
+            self.session.set_keyspace(self.keyspace)
+        except Exception:
+            pass
+
         for stmt in _split_cql(cql):
+            s = stmt.strip().upper()
+            if s.startswith("CREATE KEYSPACE") or s.startswith("USE "):
+                try:
+                    self.session.execute(stmt)
+                except Exception as exc:
+                    logger.info("Skipped keyspace statement for managed cluster (%s): %s", stmt[:30], exc)
+                continue
             self.session.execute(stmt)
-        self.session.set_keyspace(self.keyspace)
+
+        try:
+            self.session.set_keyspace(self.keyspace)
+        except Exception:
+            pass
         self._prepare()
 
         self._ready = True

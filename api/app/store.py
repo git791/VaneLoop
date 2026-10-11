@@ -156,7 +156,11 @@ class CassandraStore:
 
         self.session = self.cluster.connect()
         self.session.default_timeout = None
-        self._ready = False
+        if hasattr(self.cluster, "metadata") and self.cluster.metadata and hasattr(self.cluster.metadata, "keyspaces"):
+            available = list(self.cluster.metadata.keyspaces.keys())
+            if self.keyspace not in available and "default_keyspace" in available:
+                self.keyspace = "default_keyspace"
+
         try:
             self.session.set_keyspace(self.keyspace)
             self._prepare()
@@ -179,8 +183,11 @@ class CassandraStore:
             schema_path = Path(__file__).resolve().parents[2] / "infra" / "cassandra" / "schema.cql"
         cql = Path(schema_path).read_text(encoding="utf-8")
 
-        # In cloud environments like Astra DB, the keyspace is pre-created and USE/CREATE KEYSPACE
-        # might throw Unauthorized errors. Try setting keyspace first.
+        if hasattr(self.cluster, "metadata") and self.cluster.metadata and hasattr(self.cluster.metadata, "keyspaces"):
+            available = list(self.cluster.metadata.keyspaces.keys())
+            if self.keyspace not in available and "default_keyspace" in available:
+                self.keyspace = "default_keyspace"
+
         try:
             self.session.set_keyspace(self.keyspace)
         except Exception:
@@ -188,12 +195,25 @@ class CassandraStore:
 
         for stmt in _split_cql(cql):
             s = stmt.strip().upper()
-            if s.startswith("CREATE KEYSPACE") or s.startswith("USE "):
+            if s.startswith("CREATE KEYSPACE"):
                 try:
                     self.session.execute(stmt)
                 except Exception as exc:
                     logger.info("Skipped keyspace statement for managed cluster (%s): %s", stmt[:30], exc)
                 continue
+            if s.startswith("USE "):
+                try:
+                    self.session.set_keyspace(self.keyspace)
+                except Exception as exc:
+                    logger.info("Skipped USE keyspace statement for managed cluster (%s): %s", stmt[:30], exc)
+                continue
+
+            if not self.session.keyspace and self.keyspace:
+                try:
+                    self.session.set_keyspace(self.keyspace)
+                except Exception:
+                    pass
+
             self.session.execute(stmt)
 
         try:

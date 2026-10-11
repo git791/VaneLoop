@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS alerts_by_engine (
   severity text, rule text, message text,
   PRIMARY KEY ((dataset, unit), ts, alert_id)
 ) WITH CLUSTERING ORDER BY (ts DESC, alert_id ASC)
+  AND default_time_to_live = 7776000;
 
 CREATE TABLE IF NOT EXISTS benchmarks (
     datetime timestamp,
@@ -57,4 +58,3 @@ CREATE TABLE IF NOT EXISTS benchmarks (
     cpu_load float,
     PRIMARY KEY (datetime, dataset)
 );
-  AND default_time_to_live = 7776000;

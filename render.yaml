@@ -1,0 +1,41 @@
+services:
+  - type: web
+    name: vaneloop-api
+    runtime: docker
+    dockerfilePath: ./api/Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    envVars:
+      - key: VANELOOP_STORE
+        value: cassandra
+      - key: REDIS_URL
+        sync: false
+      - key: ASTRA_DB_BUNDLE_BASE64
+        sync: false
+      - key: CASSANDRA_USERNAME
+        value: token
+      - key: CASSANDRA_PASSWORD
+        sync: false
+      - key: CORS_ALLOW_ORIGINS
+        sync: false
+  - type: worker
+    name: vaneloop-replayer
+    runtime: docker
+    dockerfilePath: ./replayer/Dockerfile
+    dockerContext: .
+    dockerCommand: sh -c 'python scripts/fetch_data.py && vaneloop migrate && vaneloop ingest --dataset FD001 && python -m replayer.loop --dataset FD001'
+    envVars:
+      - key: VANELOOP_STORE
+        value: cassandra
+      - key: REDIS_URL
+        sync: false
+      - key: ASTRA_DB_BUNDLE_BASE64
+        sync: false
+      - key: CASSANDRA_USERNAME
+        value: token
+      - key: CASSANDRA_PASSWORD
+        sync: false
+      - key: REPLAY_MODE
+        value: train
+      - key: REPLAY_TICK_MS
+        value: "1000"

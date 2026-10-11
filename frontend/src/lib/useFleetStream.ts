@@ -16,7 +16,12 @@ interface StreamEvent {
   [key: string]: unknown
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? ""
+const API_BASE = (
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  process.env.NEXT_PUBLIC_API_URL ??
+  "http://localhost:8000"
+).replace(/\/$/, "")
+
 const STALE_THRESHOLD_MS = 10_000
 const RECONNECT_DELAY_MS = 3_000
 
@@ -28,12 +33,13 @@ const RECONNECT_DELAY_MS = 3_000
 export function useFleetStream(dataset = "FD001") {
   const queryClient = useQueryClient()
   const [connection, setConnection] = useState<ConnectionState>("reconnecting")
-  const lastTickRef = useRef<number>(Date.now())
+  const lastTickRef = useRef<number>(0)
   const esRef = useRef<EventSource | null>(null)
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     let active = true
+    lastTickRef.current = Date.now()
 
     function connect() {
       if (!active) return
@@ -43,21 +49,21 @@ export function useFleetStream(dataset = "FD001") {
       const es = new EventSource(url)
       esRef.current = es
 
-      es.addEventListener("tick", (e) => {
+      es.addEventListener("tick", (event) => {
         if (!active) return
         lastTickRef.current = Date.now()
         setConnection("live")
-        applyEvent(JSON.parse(e.data) as StreamEvent)
+        applyEvent(JSON.parse((event as MessageEvent).data) as StreamEvent)
       })
 
-      es.addEventListener("status_change", (e) => {
+      es.addEventListener("status_change", (event) => {
         if (!active) return
         lastTickRef.current = Date.now()
         setConnection("live")
-        applyEvent(JSON.parse(e.data) as StreamEvent)
+        applyEvent(JSON.parse((event as MessageEvent).data) as StreamEvent)
       })
 
-      es.addEventListener("alert", (e) => {
+      es.addEventListener("alert", () => {
         if (!active) return
         lastTickRef.current = Date.now()
         // Invalidate alerts list so the Alerts page refetches
@@ -81,22 +87,30 @@ export function useFleetStream(dataset = "FD001") {
 
     function applyEvent(ev: StreamEvent) {
       if (!ev.unit) return
-      // Merge into the fleet query cache so the UI updates without a refetch
-      queryClient.setQueryData(["fleet", dataset], (old: unknown) => {
-        if (!Array.isArray(old)) return old
-        return old.map((eng: { unit: number; [k: string]: unknown }) =>
-          eng.unit === ev.unit
-            ? {
-                ...eng,
-                cycle: ev.cycle ?? eng.cycle,
-                state: ev.state ?? eng.state,
-                rul_p50: ev.rul_p50 ?? eng.rul_p50,
-                rul_p10: ev.rul_p10 ?? eng.rul_p10,
-                rul_p90: ev.rul_p90 ?? eng.rul_p90,
-                warmup: ev.warmup ?? eng.warmup,
-              }
-            : eng
-        )
+      
+      queryClient.setQueryData(["fleet", dataset], (oldData: any) => {
+        if (!oldData || !oldData.engines) return oldData
+        
+        const engines = [...oldData.engines]
+        const idx = engines.findIndex((e: any) => e.unit === ev.unit)
+        if (idx !== -1) {
+          engines[idx] = { ...engines[idx], ...ev }
+        }
+        
+        const counts = { nominal: 0, warning: 0, critical: 0 }
+        for (const e of engines) {
+          if (e.state === "Warning") counts.warning++
+          else if (e.state === "Critical") counts.critical++
+          else counts.nominal++
+        }
+        
+        return { counts, engines }
+      })
+
+      // Update individual engine cache
+      queryClient.setQueryData(["engine", dataset, ev.unit], (oldEngine: any) => {
+        if (!oldEngine) return oldEngine
+        return { ...oldEngine, ...ev }
       })
     }
 

@@ -14,6 +14,7 @@ Environment:
     REDIS_URL           redis connection string
     MODEL_DIR           directory containing model.onnx + scaler.json + features.yaml
 """
+
 from __future__ import annotations
 
 import json
@@ -26,6 +27,7 @@ import pandas as pd
 import redis
 
 from api.app.policy import AlertEngine, StatusPolicy
+from api.app.store import get_store
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
 logger = logging.getLogger("replayer")
@@ -34,6 +36,7 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 TICK_MS = int(os.getenv("REPLAY_TICK_MS", "1000"))
 REPLAY_MODE = os.getenv("REPLAY_MODE", "train")
 MODEL_DIR = os.getenv("MODEL_DIR", "ml/artifacts")
+DATA_DIR = os.getenv("VANELOOP_DATA_DIR", "data/raw")
 
 COLS = ["unit", "cycle", "op1", "op2", "op3"] + [f"s{i}" for i in range(1, 22)]
 
@@ -42,10 +45,12 @@ COLS = ["unit", "cycle", "op1", "op2", "op3"] + [f"s{i}" for i in range(1, 22)]
 # Optional ONNX inference loader
 # ---------------------------------------------------------------------------
 
+
 def _load_onnx_session(model_dir: str):
     """Returns an onnxruntime.InferenceSession, or None if not available."""
     try:
         import onnxruntime as ort  # type: ignore
+
         model_path = os.path.join(model_dir, "model_p50.onnx")
         if os.path.exists(model_path):
             logger.info(f"Loading ONNX model from {model_path}")
@@ -57,139 +62,213 @@ def _load_onnx_session(model_dir: str):
 
 def _linear_rul(cycle: int, max_cycle: int) -> tuple[float, float, float]:
     """Simple degrading RUL estimate when no model is available."""
-    p50 = max(0.0, float(max_cycle - cycle))
+    raw_p50 = max(0.0, float(max_cycle - cycle))
+    p50 = min(raw_p50, 125.0)
     p10 = max(0.0, p50 - 15.0)
     p90 = p50 + 15.0
-    return p10, min(p50, 125.0), p90
+    return p10, p50, p90
 
 
 # ---------------------------------------------------------------------------
 # Main loop
 # ---------------------------------------------------------------------------
 
-def run(dataset: str = "FD001", data_path: str | None = None) -> None:
-    if data_path is None:
-        split = "train" if REPLAY_MODE == "train" else "test"
-        data_path = f"data/raw/{split}_{dataset}.txt"
 
-    if not os.path.exists(data_path):
-        logger.error(
-            f"Data file not found: {data_path}\n"
-            "Run:  uv run python scripts/fetch_data.py  then retry."
+class DatasetReplay:
+    def __init__(self, dataset: str, data_path: str):
+        self.dataset = dataset
+        self.data_path = data_path
+        self.df = pd.read_csv(data_path, sep=r"\s+", header=None, names=COLS)
+        self.max_cycles: dict[int, int] = self.df.groupby("unit")["cycle"].max().to_dict()
+        self.engines = sorted(self.df["unit"].unique().tolist())
+        self.current_cycles: dict[int, int] = {
+            u: int(self.df[self.df["unit"] == u]["cycle"].min()) for u in self.engines
+        }
+        self.df_indexed = self.df.set_index(["unit", "cycle"])
+        self.policy = StatusPolicy()
+        self.alert_engine = AlertEngine()
+
+
+def run(dataset: str = "FD001", data_path: str | None = None) -> None:
+    datasets = ["FD001", "FD002", "FD003", "FD004"] if dataset.lower() == "all" else [dataset]
+    active_replays: list[DatasetReplay] = []
+
+    for ds in datasets:
+        ds_path = (
+            data_path
+            if (data_path and len(datasets) == 1)
+            else os.path.join(DATA_DIR, f"{'train' if REPLAY_MODE == 'train' else 'test'}_{ds}.txt")
         )
+        if not os.path.exists(ds_path):
+            logger.warning(f"Data file not found for {ds}: {ds_path}. Skipping.")
+            continue
+        logger.info(f"Loading {ds} from {ds_path} (mode={REPLAY_MODE})")
+        active_replays.append(DatasetReplay(ds, ds_path))
+
+    if not active_replays:
+        logger.error("No valid dataset found to replay.")
         return
 
-    logger.info(f"Loading {dataset} from {data_path} (mode={REPLAY_MODE})")
-    df = pd.read_csv(data_path, sep=r"\s+", header=None, names=COLS)
-    # Pre-compute max cycle per unit for linear RUL fallback
-    max_cycles: dict[int, int] = df.groupby("unit")["cycle"].max().to_dict()
-
-    engines = sorted(df["unit"].unique().tolist())
-    current_cycles: dict[int, int] = {u: int(df[df["unit"] == u]["cycle"].min()) for u in engines}
-
-    # Build a cycle-indexed lookup for O(1) row access
-    df_indexed = df.set_index(["unit", "cycle"])
-
-    policy = StatusPolicy()
-    alert_engine = AlertEngine()
     onnx_session = _load_onnx_session(MODEL_DIR)
 
-    logger.info(f"Connecting to Redis at {REDIS_URL}")
-    r = redis.from_url(REDIS_URL, decode_responses=True)
+    r = None
+    try:
+        logger.info(f"Connecting to Redis at {REDIS_URL}")
+        client = redis.from_url(REDIS_URL, decode_responses=True)
+        client.ping()
+        r = client
+        logger.info("Connected to Redis successfully.")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"Redis unavailable ({exc}); continuing with cold-path store only.")
 
-    logger.info(f"Starting replay: {len(engines)} engines, tick={TICK_MS}ms")
+    store = get_store()
+    total_engines = sum(len(dr.engines) for dr in active_replays)
+    logger.info(
+        f"Starting replay: {total_engines} engines across {len(active_replays)} datasets, tick={TICK_MS}ms"
+    )
     replay_start = time.time()
 
     for tick_idx in count():
-        tick_events: list[dict] = []
-        counts: dict[str, int] = {"Nominal": 0, "Warning": 0, "Critical": 0}
+        for dr in active_replays:
+            ds = dr.dataset
+            tick_events: list[dict] = []
+            prediction_rows: list[dict] = []
+            alert_rows: list[dict] = []
+            counts: dict[str, int] = {"Nominal": 0, "Warning": 0, "Critical": 0}
 
-        for unit in engines:
-            cycle = current_cycles[unit]
+            for unit in dr.engines:
+                cycle = dr.current_cycles[unit]
 
-            try:
-                row = df_indexed.loc[(unit, cycle)]
-            except KeyError:
-                # Engine finished its trajectory
-                if REPLAY_MODE == "loop":
-                    current_cycles[unit] = int(df[df["unit"] == unit]["cycle"].min())
-                continue
+                try:
+                    row = dr.df_indexed.loc[(unit, cycle)]
+                except KeyError:
+                    # Engine finished its trajectory
+                    if REPLAY_MODE == "loop":
+                        dr.current_cycles[unit] = int(dr.df[dr.df["unit"] == unit]["cycle"].min())
+                    continue
 
-            sensors: dict[str, float] = {f"s{i}": float(row[f"s{i}"]) for i in range(1, 22)}
+                sensors: dict[str, float] = {f"s{i}": float(row[f"s{i}"]) for i in range(1, 22)}
 
-            # --- Inference ---
-            if onnx_session is not None:
-                # TODO: build proper 30-cycle windowed input and run session
-                rul_p10, rul_p50, rul_p90 = _linear_rul(cycle, max_cycles[unit])
-            else:
-                rul_p10, rul_p50, rul_p90 = _linear_rul(cycle, max_cycles[unit])
+                # --- Inference ---
+                rul_p10, rul_p50, rul_p90 = _linear_rul(cycle, dr.max_cycles[unit])
 
-            # --- Policy ---
-            prev_state = policy.current_state(unit)
-            new_state = policy.evaluate(unit, cycle, rul_p10, rul_p50)
-            counts[new_state] += 1
+                # --- Policy ---
+                prev_state = dr.policy.current_state(unit)
+                new_state = dr.policy.evaluate(unit, cycle, rul_p10, rul_p50)
+                counts[new_state] += 1
 
-            # --- Alerts ---
-            alerts = alert_engine.check(unit, cycle, prev_state, new_state, sensors)
+                # --- Alerts ---
+                alerts = dr.alert_engine.check(unit, cycle, prev_state, new_state, sensors)
 
-            # --- Redis hot-path writes ---
-            status_key = f"vl:{dataset}:engine:{unit}:status"
-            r.hset(status_key, mapping={
-                "dataset": dataset,
-                "unit": unit,
-                "cycle": cycle,
-                "state": new_state,
-                "rul_p10": rul_p10,
-                "rul_p50": rul_p50,
-                "rul_p90": rul_p90,
-                "warmup": "true" if cycle <= 30 else "false",
-                "model_version": "1.0.0",
-                "updated_at": time.time(),
-            })
-            r.zadd(f"vl:{dataset}:fleet:by_rul", {str(unit): rul_p50})
+                # --- Redis hot-path writes (if available) ---
+                if r is not None:
+                    try:
+                        status_key = f"vl:{ds}:engine:{unit}:status"
+                        r.hset(
+                            status_key,
+                            mapping={
+                                "dataset": ds,
+                                "unit": unit,
+                                "cycle": cycle,
+                                "state": new_state,
+                                "rul_p10": rul_p10,
+                                "rul_p50": rul_p50,
+                                "rul_p90": rul_p90,
+                                "warmup": "true" if cycle <= 30 else "false",
+                                "model_version": "1.0.0",
+                                "updated_at": time.time(),
+                            },
+                        )
+                        r.zadd(f"vl:{ds}:fleet:by_rul", {str(unit): rul_p50})
+                    except (redis.exceptions.RedisError, OSError) as exc:
+                        logger.debug("Redis status write failed: %s", exc)
 
-            # Append tick event for SSE fan-out
-            tick_events.append({
-                "type": "tick" if new_state == prev_state else "status_change",
-                "unit": unit,
-                "cycle": cycle,
-                "state": new_state,
-                "rul_p50": round(rul_p50, 1),
-                "rul_p10": round(rul_p10, 1),
-                "rul_p90": round(rul_p90, 1),
-                "warmup": cycle <= 30,
-            })
+                prediction_rows.append(
+                    {
+                        "dataset": ds,
+                        "unit": unit,
+                        "cycle": cycle,
+                        "model_version": "replay-baseline-v0"
+                        if onnx_session is None
+                        else "onnx-v1",
+                        "rul_p10": rul_p10,
+                        "rul_p50": rul_p50,
+                        "rul_p90": rul_p90,
+                        "health_index": None,
+                        "state": new_state,
+                        "warmup": cycle <= 30,
+                    }
+                )
 
-            # Push alerts — never dropped
-            for alert in alerts:
-                payload = json.dumps({**alert, "dataset": dataset})
-                r.xadd(f"vl:{dataset}:alerts", {"payload": payload}, maxlen=1000)
-                tick_events.append({"type": "alert", **alert, "dataset": dataset})
-                logger.info(f"ALERT unit={unit} cycle={cycle} rule={alert['rule']} sev={alert['severity']}")
+                tick_events.append(
+                    {
+                        "type": "tick" if new_state == prev_state else "status_change",
+                        "unit": unit,
+                        "cycle": cycle,
+                        "state": new_state,
+                        "rul_p50": round(rul_p50, 1),
+                        "rul_p10": round(rul_p10, 1),
+                        "rul_p90": round(rul_p90, 1),
+                        "warmup": cycle <= 30,
+                    }
+                )
 
-            current_cycles[unit] += 1
+                for alert in alerts:
+                    alert_payload = {**alert, "dataset": ds}
+                    if r is not None:
+                        try:
+                            r.xadd(
+                                f"vl:{ds}:alerts",
+                                {"payload": json.dumps(alert_payload)},
+                                maxlen=1000,
+                            )
+                        except (redis.exceptions.RedisError, OSError) as exc:
+                            logger.debug("Redis alert push failed: %s", exc)
+                    alert_rows.append(
+                        {
+                            **alert,
+                            "dataset": ds,
+                            "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                        }
+                    )
+                    tick_events.append({"type": "alert", **alert, "dataset": ds})
+                    logger.info(
+                        f"ALERT ds={ds} unit={unit} cycle={cycle} rule={alert['rule']} sev={alert['severity']}"
+                    )
 
-        # Atomic fleet count update
-        r.hset(f"vl:{dataset}:fleet:counts", mapping={
-            "nominal": counts["Nominal"],
-            "warning": counts["Warning"],
-            "critical": counts["Critical"],
-        })
+                dr.current_cycles[unit] += 1
 
-        # Publish all tick+alert events on the pub/sub channel
-        r.publish(f"vl:{dataset}:ticks", json.dumps(tick_events))
+            if r is not None:
+                try:
+                    r.hset(
+                        f"vl:{ds}:fleet:counts",
+                        mapping={
+                            "nominal": counts["Nominal"],
+                            "warning": counts["Warning"],
+                            "critical": counts["Critical"],
+                        },
+                    )
+                    r.publish(f"vl:{ds}:ticks", json.dumps(tick_events))
+                except (redis.exceptions.RedisError, OSError) as exc:
+                    logger.debug("Redis fleet count update failed: %s", exc)
+
+            store.write_predictions(prediction_rows)
+            if alert_rows:
+                store.write_alerts(alert_rows)
+
+            logger.info(
+                f"[{ds}] tick={tick_idx} N={counts['Nominal']} W={counts['Warning']} C={counts['Critical']}"
+            )
 
         replay_clock = time.time() - replay_start
-        logger.info(
-            f"tick={tick_idx} replay_t={replay_clock:.1f}s  "
-            f"N={counts['Nominal']} W={counts['Warning']} C={counts['Critical']}"
-        )
+        logger.info(f"tick={tick_idx} replay_elapsed={replay_clock:.1f}s")
         time.sleep(TICK_MS / 1000.0)
 
 
 if __name__ == "__main__":
     import argparse
+
     p = argparse.ArgumentParser()
-    p.add_argument("--dataset", default="FD001")
+    p.add_argument("--dataset", default="FD001", help="FD001, FD002, FD003, FD004 or all")
     args = p.parse_args()
     run(dataset=args.dataset)

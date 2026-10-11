@@ -3,23 +3,23 @@ tests/test_policy.py — Unit tests for api/app/policy.py.
 
 Run with:  uv run pytest tests/test_policy.py -v
 """
-import pytest
+
 from api.app.policy import (
+    BASELINE_CYCLES,
+    DRIFT_CONSECUTIVE_CYCLES,
+    HYSTERESIS_STREAK,
+    WARMUP_CYCLES,
     AlertEngine,
     SensorDriftTracker,
     StatusPolicy,
     apply_hysteresis,
     compute_raw_state,
-    BASELINE_CYCLES,
-    DRIFT_CONSECUTIVE_CYCLES,
-    HYSTERESIS_STREAK,
-    WARMUP_CYCLES,
 )
-
 
 # ---------------------------------------------------------------------------
 # compute_raw_state
 # ---------------------------------------------------------------------------
+
 
 class TestComputeRawState:
     def test_critical_when_p10_le_30(self):
@@ -42,6 +42,7 @@ class TestComputeRawState:
 # apply_hysteresis
 # ---------------------------------------------------------------------------
 
+
 class TestApplyHysteresis:
     def test_upgrade_is_immediate(self):
         state, streak = apply_hysteresis("Critical", "Nominal", 0)
@@ -55,7 +56,7 @@ class TestApplyHysteresis:
         assert streak == 1
 
     def test_downgrade_fires_after_streak(self):
-        state, streak = apply_hysteresis("Nominal", "Critical", HYSTERESIS_STREAK - 1)
+        state, _streak = apply_hysteresis("Nominal", "Critical", HYSTERESIS_STREAK - 1)
         assert state == "Nominal"
 
     def test_same_state_is_stable(self):
@@ -67,6 +68,7 @@ class TestApplyHysteresis:
 # ---------------------------------------------------------------------------
 # StatusPolicy (stateful)
 # ---------------------------------------------------------------------------
+
 
 class TestStatusPolicy:
     def test_warmup_returns_nominal(self):
@@ -98,7 +100,7 @@ class TestStatusPolicy:
     def test_multiple_units_are_independent(self):
         p = StatusPolicy()
         c = WARMUP_CYCLES + 1
-        p.evaluate(1, c, rul_p10=10, rul_p50=20)   # unit 1 → Critical
+        p.evaluate(1, c, rul_p10=10, rul_p50=20)  # unit 1 → Critical
         state2 = p.evaluate(2, c, rul_p10=80, rul_p50=120)  # unit 2 → Nominal
         assert state2 == "Nominal"
         assert p.current_state(1) == "Critical"
@@ -107,6 +109,7 @@ class TestStatusPolicy:
 # ---------------------------------------------------------------------------
 # SensorDriftTracker (R2)
 # ---------------------------------------------------------------------------
+
 
 class TestSensorDriftTracker:
     def _stable_readings(self, mean: float = 100.0, std: float = 1.0):
@@ -148,6 +151,7 @@ class TestSensorDriftTracker:
 # ---------------------------------------------------------------------------
 # AlertEngine (integration: R1 + R2 + debounce)
 # ---------------------------------------------------------------------------
+
 
 class TestAlertEngine:
     def test_r1_fires_on_upgrade(self):

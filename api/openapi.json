@@ -1,0 +1,1102 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "VaneLoop API",
+    "description": "Fleet health dashboard API. Data is simulated NASA C-MAPSS replay. Not for real aircraft maintenance decisions.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/fleet": {
+      "get": {
+        "summary": "Get Fleet",
+        "description": "Return all engine statuses and fleet counts. Source: Redis hot path.",
+        "operationId": "get_fleet_api_v1_fleet_get",
+        "parameters": [
+          {
+            "name": "dataset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "FD001",
+              "title": "Dataset"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by Nominal|Warning|Critical",
+              "title": "State"
+            },
+            "description": "Filter by Nominal|Warning|Critical"
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "rul_asc|rul_desc|id|cycle",
+              "default": "rul_asc",
+              "title": "Sort"
+            },
+            "description": "rul_asc|rul_desc|id|cycle"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FleetResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/engines/{dataset}/{unit}": {
+      "get": {
+        "summary": "Get Engine Status",
+        "description": "Single engine current status from Redis.",
+        "operationId": "get_engine_status_api_v1_engines__dataset___unit__get",
+        "parameters": [
+          {
+            "name": "dataset",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset"
+            }
+          },
+          {
+            "name": "unit",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Unit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EngineStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/engines/{dataset}/{unit}/readings": {
+      "get": {
+        "summary": "Get Engine Readings",
+        "description": "Engine historical readings from Cassandra (cold path).",
+        "operationId": "get_engine_readings_api_v1_engines__dataset___unit__readings_get",
+        "parameters": [
+          {
+            "name": "dataset",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset"
+            }
+          },
+          {
+            "name": "unit",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Unit"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "default": 200,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "before_cycle",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before Cycle"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadingsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/engines/{dataset}/{unit}/rul": {
+      "get": {
+        "summary": "Get Engine Rul",
+        "description": "Predicted RUL trajectory with p10-p90 uncertainty from the cold path.",
+        "operationId": "get_engine_rul_api_v1_engines__dataset___unit__rul_get",
+        "parameters": [
+          {
+            "name": "dataset",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset"
+            }
+          },
+          {
+            "name": "unit",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Unit"
+            }
+          },
+          {
+            "name": "from_cycle",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From Cycle"
+            }
+          },
+          {
+            "name": "to_cycle",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To Cycle"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PredictionsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sensors/{dataset}/{sensor}/fleet-trend": {
+      "get": {
+        "summary": "Get Sensor Fleet Trend",
+        "description": "Fleet-wide trend for a single sensor from Cassandra.",
+        "operationId": "get_sensor_fleet_trend_api_v1_sensors__dataset___sensor__fleet_trend_get",
+        "parameters": [
+          {
+            "name": "dataset",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset"
+            }
+          },
+          {
+            "name": "sensor",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sensor"
+            }
+          },
+          {
+            "name": "from_cycle",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "title": "From Cycle"
+            }
+          },
+          {
+            "name": "to_cycle",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 300,
+              "title": "To Cycle"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SensorTrendResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/alerts": {
+      "get": {
+        "summary": "Get Alerts",
+        "description": "Alert feed from Redis Stream (hot) \u2014 keyset-paginated.",
+        "operationId": "get_alerts_api_v1_alerts_get",
+        "parameters": [
+          {
+            "name": "dataset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "FD001",
+              "title": "Dataset"
+            }
+          },
+          {
+            "name": "severity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Severity"
+            }
+          },
+          {
+            "name": "rule",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rule"
+            }
+          },
+          {
+            "name": "unit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Unit"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/stream": {
+      "get": {
+        "summary": "Sse Stream",
+        "description": "Server-Sent Events endpoint.\nEvents: tick, status_change, alert, heartbeat.\nConnect with Last-Event-ID to resume from Redis stream.",
+        "operationId": "sse_stream_api_v1_stream_get",
+        "parameters": [
+          {
+            "name": "dataset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "FD001",
+              "title": "Dataset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/meta/data": {
+      "get": {
+        "summary": "Get Meta Data",
+        "operationId": "get_meta_data_api_v1_meta_data_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetaData"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "summary": "Healthz",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "summary": "Readyz",
+        "description": "Check Redis connectivity.",
+        "operationId": "readyz_readyz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AlertItem": {
+        "properties": {
+          "unit": {
+            "type": "integer",
+            "title": "Unit"
+          },
+          "cycle": {
+            "type": "integer",
+            "title": "Cycle"
+          },
+          "rule": {
+            "type": "string",
+            "title": "Rule"
+          },
+          "severity": {
+            "type": "string",
+            "title": "Severity"
+          },
+          "sensor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sensor"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "unit",
+          "cycle",
+          "rule",
+          "severity",
+          "message"
+        ],
+        "title": "AlertItem"
+      },
+      "AlertsResponse": {
+        "properties": {
+          "dataset": {
+            "type": "string",
+            "title": "Dataset"
+          },
+          "alerts": {
+            "items": {
+              "$ref": "#/components/schemas/AlertItem"
+            },
+            "type": "array",
+            "title": "Alerts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dataset",
+          "alerts"
+        ],
+        "title": "AlertsResponse"
+      },
+      "EngineStatus": {
+        "properties": {
+          "dataset": {
+            "type": "string",
+            "title": "Dataset"
+          },
+          "unit": {
+            "type": "integer",
+            "title": "Unit"
+          },
+          "cycle": {
+            "type": "integer",
+            "title": "Cycle"
+          },
+          "state": {
+            "type": "string",
+            "title": "State",
+            "description": "Nominal, Warning, Critical"
+          },
+          "rul_p10": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rul P10"
+          },
+          "rul_p50": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rul P50"
+          },
+          "rul_p90": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rul P90"
+          },
+          "health_index": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health Index"
+          },
+          "warmup": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warmup",
+            "default": false
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dataset",
+          "unit",
+          "cycle",
+          "state"
+        ],
+        "title": "EngineStatus"
+      },
+      "FleetCounts": {
+        "properties": {
+          "nominal": {
+            "type": "integer",
+            "title": "Nominal",
+            "default": 0
+          },
+          "warning": {
+            "type": "integer",
+            "title": "Warning",
+            "default": 0
+          },
+          "critical": {
+            "type": "integer",
+            "title": "Critical",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "FleetCounts"
+      },
+      "FleetResponse": {
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/FleetCounts"
+          },
+          "engines": {
+            "items": {
+              "$ref": "#/components/schemas/EngineStatus"
+            },
+            "type": "array",
+            "title": "Engines"
+          }
+        },
+        "type": "object",
+        "required": [
+          "counts",
+          "engines"
+        ],
+        "title": "FleetResponse"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "MetaData": {
+        "properties": {
+          "provenance": {
+            "type": "string",
+            "title": "Provenance"
+          },
+          "license": {
+            "type": "string",
+            "title": "License"
+          },
+          "citation": {
+            "type": "string",
+            "title": "Citation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provenance",
+          "license",
+          "citation"
+        ],
+        "title": "MetaData"
+      },
+      "PredictionsResponse": {
+        "properties": {
+          "dataset": {
+            "type": "string",
+            "title": "Dataset"
+          },
+          "unit": {
+            "type": "integer",
+            "title": "Unit"
+          },
+          "predictions": {
+            "items": {
+              "$ref": "#/components/schemas/EngineStatus"
+            },
+            "type": "array",
+            "title": "Predictions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dataset",
+          "unit",
+          "predictions"
+        ],
+        "title": "PredictionsResponse"
+      },
+      "Reading": {
+        "properties": {
+          "cycle": {
+            "type": "integer",
+            "title": "Cycle"
+          },
+          "op1": {
+            "type": "number",
+            "title": "Op1"
+          },
+          "op2": {
+            "type": "number",
+            "title": "Op2"
+          },
+          "op3": {
+            "type": "number",
+            "title": "Op3"
+          },
+          "s1": {
+            "type": "number",
+            "title": "S1"
+          },
+          "s2": {
+            "type": "number",
+            "title": "S2"
+          },
+          "s3": {
+            "type": "number",
+            "title": "S3"
+          },
+          "s4": {
+            "type": "number",
+            "title": "S4"
+          },
+          "s5": {
+            "type": "number",
+            "title": "S5"
+          },
+          "s6": {
+            "type": "number",
+            "title": "S6"
+          },
+          "s7": {
+            "type": "number",
+            "title": "S7"
+          },
+          "s8": {
+            "type": "number",
+            "title": "S8"
+          },
+          "s9": {
+            "type": "number",
+            "title": "S9"
+          },
+          "s10": {
+            "type": "number",
+            "title": "S10"
+          },
+          "s11": {
+            "type": "number",
+            "title": "S11"
+          },
+          "s12": {
+            "type": "number",
+            "title": "S12"
+          },
+          "s13": {
+            "type": "number",
+            "title": "S13"
+          },
+          "s14": {
+            "type": "number",
+            "title": "S14"
+          },
+          "s15": {
+            "type": "number",
+            "title": "S15"
+          },
+          "s16": {
+            "type": "number",
+            "title": "S16"
+          },
+          "s17": {
+            "type": "number",
+            "title": "S17"
+          },
+          "s18": {
+            "type": "number",
+            "title": "S18"
+          },
+          "s19": {
+            "type": "number",
+            "title": "S19"
+          },
+          "s20": {
+            "type": "number",
+            "title": "S20"
+          },
+          "s21": {
+            "type": "number",
+            "title": "S21"
+          },
+          "rul_true": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rul True"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cycle",
+          "op1",
+          "op2",
+          "op3",
+          "s1",
+          "s2",
+          "s3",
+          "s4",
+          "s5",
+          "s6",
+          "s7",
+          "s8",
+          "s9",
+          "s10",
+          "s11",
+          "s12",
+          "s13",
+          "s14",
+          "s15",
+          "s16",
+          "s17",
+          "s18",
+          "s19",
+          "s20",
+          "s21"
+        ],
+        "title": "Reading"
+      },
+      "ReadingsResponse": {
+        "properties": {
+          "dataset": {
+            "type": "string",
+            "title": "Dataset"
+          },
+          "unit": {
+            "type": "integer",
+            "title": "Unit"
+          },
+          "readings": {
+            "items": {
+              "$ref": "#/components/schemas/Reading"
+            },
+            "type": "array",
+            "title": "Readings"
+          },
+          "next_page_token": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Page Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dataset",
+          "unit",
+          "readings"
+        ],
+        "title": "ReadingsResponse"
+      },
+      "SensorTrendPoint": {
+        "properties": {
+          "cycle": {
+            "type": "integer",
+            "title": "Cycle"
+          },
+          "unit": {
+            "type": "integer",
+            "title": "Unit"
+          },
+          "value": {
+            "type": "number",
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cycle",
+          "unit",
+          "value"
+        ],
+        "title": "SensorTrendPoint"
+      },
+      "SensorTrendResponse": {
+        "properties": {
+          "dataset": {
+            "type": "string",
+            "title": "Dataset"
+          },
+          "sensor": {
+            "type": "string",
+            "title": "Sensor"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/SensorTrendPoint"
+            },
+            "type": "array",
+            "title": "Points"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dataset",
+          "sensor",
+          "points"
+        ],
+        "title": "SensorTrendResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

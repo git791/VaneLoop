@@ -1,41 +1,8 @@
-"use client"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+"use client";
 
-export function ReadingsTable({ data }: { data: any[] }) {
-  return (
-    <div className="rounded-md border border-border-hairline overflow-hidden w-full h-full flex flex-col bg-bg-surface">
-      <div className="overflow-auto flex-1">
-        <Table>
-          <TableHeader className="bg-bg-surface-raised sticky top-0">
-            <TableRow className="border-border-hairline">
-              <TableHead className="font-mono text-xs">Cycle</TableHead>
-              <TableHead className="font-mono text-xs text-right">T24</TableHead>
-              <TableHead className="font-mono text-xs text-right">T50</TableHead>
-              <TableHead className="font-mono text-xs text-right">P30</TableHead>
-              <TableHead className="font-mono text-xs text-right">Nf</TableHead>
-              <TableHead className="font-mono text-xs text-center w-[60px]">Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {data.map((row, i) => (
-              <TableRow key={i} className="border-border-hairline hover:bg-bg-surface-raised transition-colors">
-                <TableCell className="font-mono text-xs text-muted-foreground">{row.cycle}</TableCell>
-                <TableCell className="font-mono text-xs text-right">{row.t24.toFixed(2)}</TableCell>
-                <TableCell className="font-mono text-xs text-right">{row.t50.toFixed(2)}</TableCell>
-                <TableCell className="font-mono text-xs text-right">{row.p30.toFixed(2)}</TableCell>
-                <TableCell className="font-mono text-xs text-right">{row.nf.toFixed(2)}</TableCell>
-                <TableCell className="text-center flex justify-center py-3">
-                  <div className={`h-2 w-2 rounded-full ${
-                    row.status === 'warning' ? 'bg-status-warning' 
-                    : row.status === 'critical' ? 'bg-status-critical' 
-                    : 'bg-status-nominal'
-                  }`}></div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
-  )
+import { type Reading } from "@/lib/api";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+
+export function ReadingsTable({ data }: { data: Reading[] }) {
+  return <div className="h-full w-full overflow-auto rounded-md border border-border-hairline bg-bg-surface"><Table><TableHeader className="sticky top-0 bg-bg-surface-raised"><TableRow><TableHead>Cycle</TableHead><TableHead className="text-right">T24 (s2)</TableHead><TableHead className="text-right">T50 (s4)</TableHead><TableHead className="text-right">P30 (s7)</TableHead><TableHead className="text-right">Nf (s8)</TableHead><TableHead className="text-right">True RUL</TableHead></TableRow></TableHeader><TableBody>{data.map((row) => <TableRow key={row.cycle}><TableCell className="font-mono">{row.cycle}</TableCell><TableCell className="text-right font-mono">{row.s2.toFixed(2)}</TableCell><TableCell className="text-right font-mono">{row.s4.toFixed(2)}</TableCell><TableCell className="text-right font-mono">{row.s7.toFixed(2)}</TableCell><TableCell className="text-right font-mono">{row.s8.toFixed(2)}</TableCell><TableCell className="text-right font-mono">{row.rul_true === null ? "—" : row.rul_true >= 125 ? "≥ 125" : row.rul_true}</TableCell></TableRow>)}</TableBody></Table></div>;
 }

@@ -2,7 +2,7 @@
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 
-export function BenchmarkBarChart({ data, dataKey, name, color }: { data: any[], dataKey: string, name: string, color: string }) {
+export function BenchmarkBarChart({ data, dataKey, name, color }: { data: Array<Record<string, string | number>>; dataKey: string; name: string; color: string }) {
   const chartConfig = {
     [dataKey]: {
       label: name,

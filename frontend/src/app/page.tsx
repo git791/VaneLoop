@@ -1,84 +1,44 @@
-"use client"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { useQuery } from "@tanstack/react-query"
-import { fetchFleet } from "@/lib/api"
-import Link from "next/link"
+"use client";
+
+import Link from "next/link";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { fetchFleet, displayEngineId, type EngineState } from "@/lib/api";
+import { useDatasetStore } from "@/lib/useDatasetStore";
+
+const STATES: Array<"" | EngineState> = ["", "Nominal", "Warning", "Critical"];
+const STATUS_CLASS: Record<string, string> = { Nominal: "text-status-nominal", Warning: "text-status-warning", Critical: "text-status-critical" };
 
 export default function FleetOverview() {
-  const { data: engines = [], isLoading, isError } = useQuery({
-    queryKey: ['fleet'],
-    queryFn: fetchFleet
-  })
+  const { dataset, setDataset } = useDatasetStore();
+  const [state, setState] = useState("");
+  const [sort, setSort] = useState("rul_asc");
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ["fleet", dataset, state, sort],
+    queryFn: () => fetchFleet(dataset, state || undefined, sort),
+  });
 
-  if (isLoading) return <div className="p-4">Loading fleet data...</div>
-  if (isError) return <div className="p-4 text-status-critical">Error loading fleet data</div>
+  if (isLoading) return <p className="p-4" role="status">Loading replayed fleet data…</p>;
+  if (isError || !data) return <button className="p-4 text-status-critical" onClick={() => refetch()}>Could not load the fleet. Retry</button>;
+  const fleet = { counts: data.counts ?? { nominal: 0, warning: 0, critical: 0 }, engines: data.engines ?? [] };
 
-  const nominalCount = engines.filter(e => e.status === "nominal").length
-  const warningCount = engines.filter(e => e.status === "warning").length
-  const criticalCount = engines.filter(e => e.status === "critical").length
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Fleet Overview</h1>
-        <p className="text-muted-foreground">Monitor real-time engine health and sensor degradation.</p>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="bg-bg-surface border-border-hairline shadow-none">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Nominal Engines</CardTitle>
-            <div className="h-3 w-3 rounded-full bg-status-nominal"></div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{nominalCount}</div>
-          </CardContent>
-        </Card>
-        <Card className="bg-bg-surface border-border-hairline shadow-none">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Warning State</CardTitle>
-            <div className="h-3 w-3 rounded-full bg-status-warning"></div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{warningCount}</div>
-          </CardContent>
-        </Card>
-        <Card className="bg-bg-surface border-border-hairline shadow-none">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Critical State</CardTitle>
-            <div className="h-3 w-3 rounded-full bg-status-critical"></div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{criticalCount}</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
-        {engines.map((engine) => (
-          <Link
-            key={engine.id}
-            href={`/engine/${engine.id}`}
-            className="group flex flex-col p-4 border border-border-hairline bg-bg-surface hover:bg-bg-surface-raised transition-colors"
-          >
-            <div className="flex justify-between items-start mb-4">
-              <span className="font-mono text-sm font-bold">{engine.id}</span>
-              <div 
-                className={`h-2 w-2 rounded-full mt-1 ${
-                  engine.status === "nominal" ? "bg-status-nominal" 
-                  : engine.status === "warning" ? "bg-status-warning" 
-                  : "bg-status-critical"
-                }`}
-              />
-            </div>
-            <div className="mt-auto">
-              <div className="text-xs text-muted-foreground mb-1">Cycle</div>
-              <div className="font-mono text-lg">{engine.lastCycle}</div>
-            </div>
-          </Link>
-        ))}
+  return <div className="space-y-6">
+    <div className="flex flex-wrap items-end justify-between gap-4">
+      <div><h1 className="text-2xl font-bold tracking-tight">Fleet Overview</h1><p className="text-muted-foreground">Simulated NASA C-MAPSS replay; never for maintenance decisions.</p></div>
+      <div className="flex gap-2">
+        <label className="text-sm">Dataset <select value={dataset} onChange={(e) => setDataset(e.target.value)} className="ml-1 border bg-bg-surface p-2"><option>FD001</option><option>FD002</option><option>FD003</option><option>FD004</option></select></label>
+        <label className="text-sm">State <select value={state} onChange={(e) => setState(e.target.value)} className="ml-1 border bg-bg-surface p-2">{STATES.map((item) => <option key={item} value={item}>{item || "All"}</option>)}</select></label>
+        <label className="text-sm">Sort <select value={sort} onChange={(e) => setSort(e.target.value)} className="ml-1 border bg-bg-surface p-2"><option value="rul_asc">RUL ↑</option><option value="rul_desc">RUL ↓</option><option value="id">ID</option><option value="cycle">Cycle</option></select></label>
       </div>
     </div>
-  )
+    {(dataset === "FD002" || dataset === "FD004") && <p className="border border-status-warning p-3 text-sm">This dataset has six operating conditions; comparisons use its replayed operating settings.</p>}
+    <div className="grid gap-4 md:grid-cols-3 tabular-nums">
+      {(["nominal", "warning", "critical"] as const).map((key) => <div key={key} className="border border-border-hairline bg-bg-surface p-4"><p className="text-sm capitalize">{key}</p><p className="font-mono text-2xl">{fleet.counts[key] ?? 0}</p></div>)}
+    </div>
+    {!fleet.engines.length ? <p className="border border-border-hairline p-6 text-muted-foreground">No replay state is available yet. Start the replayer after ingesting this dataset.</p> : <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
+      {fleet.engines.map((engine) => <Link key={engine.unit} href={`/engine/${displayEngineId(engine.dataset, engine.unit)}`} className="border border-border-hairline bg-bg-surface p-4 transition-colors hover:bg-bg-surface-raised">
+        <p className="font-mono font-bold">{displayEngineId(engine.dataset, engine.unit)}</p><p className={`mt-2 text-sm ${STATUS_CLASS[engine.state] ?? "text-status-nominal"}`}>● {engine.warmup ? "Warming up" : engine.state}</p><p className="mt-4 text-xs text-muted-foreground">Cycle</p><p className="font-mono text-lg">{engine.cycle}</p><p className="text-xs text-muted-foreground">RUL p50</p><p className="font-mono">{engine.rul_p50 === null ? "—" : engine.rul_p50 >= 125 ? "≥ 125" : engine.rul_p50.toFixed(1)}</p>
+      </Link>)}
+    </div>}
+  </div>;
 }

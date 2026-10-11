@@ -33,6 +33,30 @@ services:
     environment:
       - CASSANDRA_CONTACT_POINTS=cassandra
       - REDIS_URL=redis://redis:6379
+      - CORS_ALLOW_ORIGINS=http://localhost:3000
+    volumes:
+      - ../data/raw:/app/data/raw:ro
+      - ../benchmarks:/app/benchmarks:ro
+    depends_on:
+      cassandra:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  replayer:
+    build:
+      context: ..
+      dockerfile: replayer/Dockerfile
+    container_name: vaneloop-replayer
+    environment:
+      - CASSANDRA_CONTACT_POINTS=cassandra
+      - REDIS_URL=redis://redis:6379
+      - REPLAY_MODE=loop       
+      - REPLAY_TICK_MS=1000
+    command: ["uv", "run", "python", "-m", "replayer.loop", "--dataset", "all"]  # <--- Replay ALL datasets
+    volumes:
+      - ../data/raw:/app/data/raw:ro
+      - ../ml/artifacts:/app/ml/artifacts:ro
     depends_on:
       cassandra:
         condition: service_healthy

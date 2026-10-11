@@ -10,4 +10,4 @@ RUN uv sync --frozen
 
 COPY . .
 
-CMD ["uv", "run", "python", "-m", "replayer.main"]
+CMD ["uv", "run", "python", "-m", "replayer.loop"]

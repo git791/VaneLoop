@@ -1,20 +1,25 @@
 "use client"
+
+import { useSyncExternalStore } from "react"
 import { useTheme } from "next-themes"
 import { Moon, Sun, Settings, Search, Activity } from "lucide-react"
 import Link from "next/link"
-import { useEffect, useState } from "react"
 import { useFleetStream } from "@/lib/useFleetStream"
+import { useDatasetStore } from "@/lib/useDatasetStore"
 import { ConnectionBadge } from "@/components/ConnectionBadge"
+
+const emptySubscribe = () => () => {}
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { setTheme, theme } = useTheme()
-  const [mounted, setMounted] = useState(false)
-  // One shared stream for the whole app shell — dataset can be made dynamic later
-  const { connection } = useFleetStream("FD001")
+  const mounted = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false
+  )
 
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  const dataset = useDatasetStore((s) => s.dataset)
+  const { connection } = useFleetStream(dataset)
 
   return (
     <div className="flex flex-col h-screen bg-bg-canvas text-foreground">
@@ -34,7 +39,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             className="text-muted-foreground hover:text-foreground flex items-center justify-center w-4 h-4"
           >
-            {mounted ? (theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />) : null}
+            {mounted ? (
+              theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />
+            ) : (
+              <div className="h-4 w-4" />
+            )}
           </button>
           <button className="text-muted-foreground hover:text-foreground">
             <Settings className="h-4 w-4" />

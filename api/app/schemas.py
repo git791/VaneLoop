@@ -1,27 +1,32 @@
-from typing import List, Optional, Any
+from datetime import datetime
+
 from pydantic import BaseModel, Field
+
 
 class EngineStatus(BaseModel):
     dataset: str
     unit: int
     cycle: int
     state: str = Field(..., description="Nominal, Warning, Critical")
-    rul_p10: Optional[float] = None
-    rul_p50: Optional[float] = None
-    rul_p90: Optional[float] = None
-    health_index: Optional[float] = None
-    warmup: Optional[bool] = False
-    model_version: Optional[str] = None
-    updated_at: Optional[str] = None
+    rul_p10: float | None = None
+    rul_p50: float | None = None
+    rul_p90: float | None = None
+    health_index: float | None = None
+    warmup: bool | None = False
+    model_version: str | None = None
+    updated_at: str | None = None
+
 
 class FleetCounts(BaseModel):
     nominal: int = 0
     warning: int = 0
     critical: int = 0
 
+
 class FleetResponse(BaseModel):
     counts: FleetCounts
-    engines: List[EngineStatus]
+    engines: list[EngineStatus]
+
 
 class Reading(BaseModel):
     cycle: int
@@ -49,40 +54,53 @@ class Reading(BaseModel):
     s19: float
     s20: float
     s21: float
-    rul_true: Optional[int] = None
+    rul_true: int | None = None
+
 
 class ReadingsResponse(BaseModel):
     dataset: str
     unit: int
-    readings: List[Reading]
-    next_page_token: Optional[int] = None
+    readings: list[Reading]
+    next_page_token: int | None = None
+
 
 class SensorTrendPoint(BaseModel):
     cycle: int
     unit: int
     value: float
 
+
 class SensorTrendResponse(BaseModel):
     dataset: str
     sensor: str
-    points: List[SensorTrendPoint]
+    points: list[SensorTrendPoint]
+
 
 class MetaData(BaseModel):
     provenance: str
     license: str
     citation: str
 
+
 class AlertItem(BaseModel):
     unit: int
     cycle: int
     rule: str
     severity: str
-    sensor: Optional[str] = None
+    sensor: str | None = None
     message: str
+
 
 class AlertsResponse(BaseModel):
     dataset: str
-    alerts: List[AlertItem]
+    alerts: list[AlertItem]
+
+
+class PredictionsResponse(BaseModel):
+    dataset: str
+    unit: int
+    predictions: list[EngineStatus]
+
 
 class BenchmarkResult(BaseModel):
     datetime: datetime

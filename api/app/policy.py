@@ -3,6 +3,7 @@ policy.py — Status evaluation and alert rules.
 
 All functions are pure (no I/O) and unit-tested in tests/test_policy.py.
 """
+
 from __future__ import annotations
 
 import math
@@ -11,8 +12,20 @@ SEVERITY = {"Nominal": 0, "Warning": 1, "Critical": 2}
 
 # Informative sensors for FD001 used in R2 drift checks
 INFORMATIVE_SENSORS = [
-    "s2", "s3", "s4", "s7", "s8", "s9", "s11",
-    "s12", "s13", "s14", "s15", "s17", "s20", "s21",
+    "s2",
+    "s3",
+    "s4",
+    "s7",
+    "s8",
+    "s9",
+    "s11",
+    "s12",
+    "s13",
+    "s14",
+    "s15",
+    "s17",
+    "s20",
+    "s21",
 ]
 
 EWMA_LAMBDA = 0.2
@@ -27,6 +40,7 @@ WARMUP_CYCLES = 30
 # ---------------------------------------------------------------------------
 # Status policy (pure function)
 # ---------------------------------------------------------------------------
+
 
 def compute_raw_state(rul_p10: float, rul_p50: float) -> str:
     """Return the raw (pre-hysteresis) state from RUL quantiles."""
@@ -81,6 +95,7 @@ class StatusPolicy:
 # ---------------------------------------------------------------------------
 # R2 – per-engine sensor drift (EWMA z-score)
 # ---------------------------------------------------------------------------
+
 
 class SensorDriftTracker:
     """
@@ -138,14 +153,16 @@ class SensorDriftTracker:
                 unit_streak[sensor] = 0
 
             if unit_streak[sensor] >= DRIFT_CONSECUTIVE_CYCLES:
-                alerts.append({
-                    "rule": "R2",
-                    "sensor": sensor,
-                    "z_score": round(z, 2),
-                    "ewma": round(ewma, 4),
-                    "baseline_mean": round(bl["mean"], 4),
-                    "baseline_std": round(bl["std"], 6),
-                })
+                alerts.append(
+                    {
+                        "rule": "R2",
+                        "sensor": sensor,
+                        "z_score": round(z, 2),
+                        "ewma": round(ewma, 4),
+                        "baseline_mean": round(bl["mean"], 4),
+                        "baseline_std": round(bl["std"], 6),
+                    }
+                )
 
         self._ewma[unit] = unit_ewma
         self._streak[unit] = unit_streak
@@ -155,6 +172,7 @@ class SensorDriftTracker:
 # ---------------------------------------------------------------------------
 # Alert engine (debounce + R1 + R2)
 # ---------------------------------------------------------------------------
+
 
 class AlertEngine:
     """
@@ -185,30 +203,34 @@ class AlertEngine:
 
         # R1 — state upgrade
         if SEVERITY[new_state] > SEVERITY[prev_state] and self._can_alert(unit, "R1", cycle):
-            alerts.append({
-                "unit": unit,
-                "cycle": cycle,
-                "rule": "R1",
-                "severity": new_state,
-                "message": f"Status upgraded: {prev_state} → {new_state}",
-            })
+            alerts.append(
+                {
+                    "unit": unit,
+                    "cycle": cycle,
+                    "rule": "R1",
+                    "severity": new_state,
+                    "message": f"Status upgraded: {prev_state} → {new_state}",
+                }
+            )
 
         # R2 — sensor drift
         drift_hits = self.drift.update(unit, cycle, sensors)
         for hit in drift_hits:
             rule_key = f"R2:{hit['sensor']}"
             if self._can_alert(unit, rule_key, cycle):
-                alerts.append({
-                    "unit": unit,
-                    "cycle": cycle,
-                    "rule": "R2",
-                    "severity": "Warning",
-                    "sensor": hit["sensor"],
-                    "z_score": hit["z_score"],
-                    "message": (
-                        f"Sensor {hit['sensor']} EWMA z={hit['z_score']} "
-                        f"exceeds ±{DRIFT_Z_THRESHOLD} for {DRIFT_CONSECUTIVE_CYCLES} cycles"
-                    ),
-                })
+                alerts.append(
+                    {
+                        "unit": unit,
+                        "cycle": cycle,
+                        "rule": "R2",
+                        "severity": "Warning",
+                        "sensor": hit["sensor"],
+                        "z_score": hit["z_score"],
+                        "message": (
+                            f"Sensor {hit['sensor']} EWMA z={hit['z_score']} "
+                            f"exceeds ±{DRIFT_Z_THRESHOLD} for {DRIFT_CONSECUTIVE_CYCLES} cycles"
+                        ),
+                    }
+                )
 
         return alerts

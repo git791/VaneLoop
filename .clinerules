@@ -1,0 +1,4 @@
+# Scope & Execution Rules
+- Restrict all file operations, searches, and reads strictly to the current workspace directory (`./`).
+- Do not search or index parent directories, global git histories, or external paths.
+- Create files and directories directly within `./` as required by the task.

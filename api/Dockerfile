@@ -11,5 +11,10 @@ RUN uv sync --frozen
 COPY api/ ./api/
 COPY infra/ ./infra/
 COPY benchmarks/ ./benchmarks/
+COPY replayer/ ./replayer/
+COPY scripts/ ./scripts/
+COPY ml/ ./ml/
 
-CMD ["uv", "run", "uvicorn", "api.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+RUN chmod +x ./scripts/entrypoint.sh
+
+CMD ["./scripts/entrypoint.sh"]

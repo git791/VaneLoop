@@ -16,7 +16,6 @@ data/raw/
 .DS_Store
 
 # Benchmarks/Logs
-benchmarks/results/
 logs/
 
 # ML Artifacts

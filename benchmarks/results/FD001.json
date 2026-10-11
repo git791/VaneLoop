@@ -1,0 +1,6 @@
+{
+  "dataset": "FD001",
+  "accuracy": 0.95,
+  "latency_ms": 150,
+  "timestamp": "2026-10-03T13:48:00Z"
+}

@@ -7,8 +7,7 @@ echo "=========================================="
 echo "Starting VaneLoop Cloud Web Service..."
 echo "=========================================="
 
-# 1. Run dataset download, migration, and background replayer concurrently
-# This ensures FastAPI binds to $PORT immediately without blocking on network tasks
+# 1. Run dataset download, migration, ingestion, and background replayer concurrently
 (
     echo "Checking C-MAPSS dataset..."
     uv run python scripts/fetch_data.py || true
@@ -17,7 +16,15 @@ echo "=========================================="
     uv run python -m api.app.cli migrate || true
 
     echo "Starting background replayer loop on all datasets..."
-    uv run python -m replayer.loop --dataset all
+    uv run python -m replayer.loop --dataset all &
+
+    echo "Ingesting historical sensor telemetry for FD001..."
+    uv run python -m api.app.cli ingest --dataset FD001 || true
+
+    echo "Ingesting remaining datasets in background..."
+    uv run python -m api.app.cli ingest --dataset FD002 || true
+    uv run python -m api.app.cli ingest --dataset FD003 || true
+    uv run python -m api.app.cli ingest --dataset FD004 || true
 ) &
 
 # 2. Start FastAPI server immediately in foreground so Render port check succeeds instantly

@@ -319,7 +319,6 @@ class CassandraStore:
                 self._ins_reading,
                 reading_args[i : i + chunk_size],
                 concurrency=20,
-                timeout=600.0,
             )
 
         for i in range(0, len(sensor_args), chunk_size):
@@ -331,7 +330,6 @@ class CassandraStore:
                         self._ins_sensor,
                         chunk,
                         concurrency=20,
-                        timeout=600.0,
                     )
                     break
                 except Exception as e:

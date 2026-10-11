@@ -41,11 +41,20 @@ app = FastAPI(
 # ---------------------------------------------------------------------------
 cors_origins = [
     origin.strip() for origin in os.getenv("CORS_ALLOW_ORIGINS", "").split(",") if origin.strip()
-] or ["http://localhost:3000", "http://127.0.0.1:3000"]
+]
+if not cors_origins or cors_origins == ["*"]:
+    cors_origins = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://vane-loop.vercel.app",
+    ]
+elif "https://vane-loop.vercel.app" not in cors_origins:
+    cors_origins.append("https://vane-loop.vercel.app")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

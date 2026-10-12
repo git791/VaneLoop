@@ -6,7 +6,7 @@
 [![Python 3.13](https://img.shields.io/badge/Python-3.13-blue?style=for-the-badge&logo=python)](https://python.org)
 [![Next.js 16](https://img.shields.io/badge/Next.js-16%20App%20Router-black?style=for-the-badge&logo=next.js)](https://nextjs.org)
 [![Apache Cassandra](https://img.shields.io/badge/Cassandra-4.1%20%2F%20AstraDB-1287B1?style=for-the-badge&logo=apachecassandra)](https://cassandra.apache.org)
-[![Redis](https://img.shields.io/badge/Redis-7.0%20In--Memory-DC382D?style=for-the-badge&logo=redis)](https://redis.io)
+[![Redis](https://img.shields.io/badge/Redis-Upstash%20%2F%20In--Container-DC382D?style=for-the-badge&logo=redis)](https://upstash.com)
 
 > ⚠️ **Safety & Airworthiness Disclaimer**: VaneLoop operates exclusively on **simulated NASA C-MAPSS data**. It is an engineering demonstration and prognostics testbed designed to demonstrate dual-tier NoSQL data engineering, distributed streaming, and quantile machine learning. It is **not certified** and must **never** be used for real-world aviation maintenance, dispatch, or airworthiness release decisions.
 
@@ -201,13 +201,18 @@ $$\text{State}(t) = \begin{cases}
 
 A fundamental design goal of VaneLoop is demonstrating proper database selection for high-velocity IoT streams.
 
-| Metric | Hot Path: Redis 7.0 | Cold Path: Apache Cassandra |
+| Metric | Hot Path: Redis (Upstash Serverless / In-Container) | Cold Path: Apache Cassandra / Astra DB |
 | :--- | :--- | :--- |
 | **Primary Responsibility** | Current fleet status, live SSE stream, sorted rankings | Immutable sensor time-series history, audits, alerts |
-| **Target Latency** | $< 1\text{ ms}$ | $10\text{--}25\text{ ms}$ |
+| **Target Latency** | $< 1\text{ ms}$ (local) / $\sim 10\text{ ms}$ (Upstash cloud) | $10\text{--}25\text{ ms}$ |
+| **Architecture** | **Upstash Serverless Redis** (HTTP/TLS, pay-per-request) or container-managed Redis daemon | Distributed wide-column cluster partitioned by `((dataset, unit), cycle)` |
 | **Data Structure** | In-Memory Hashes, Sorted Sets (ZSET), Pub/Sub channels | Wide-column distributed tables with clustering keys |
 | **Write Pattern** | Overwrite current state on tick | Append-only sequential time-series writes |
 | **Scaling Characteristic** | Memory-bounded ($O(N)$ engines) | Horizontally partitioned over commodity nodes ($O(N \times T)$ cycles) |
+
+> 💡 **Why Upstash Redis vs. In-Container Redis?**
+> - **Upstash Redis**: Serverless Redis with native TLS (`rediss://`), zero infrastructure management, and automatic persistence. Ideal for standard cloud environments.
+> - **In-Container Daemon (`redis-server`)**: On strict zero-dollar free tiers (like Render Free with 512MB RAM), a continuous multi-engine simulation loop ticking at 1000ms can execute $>500,000$ commands in minutes, exhausting free serverless quotas. VaneLoop's Docker container includes a local, 48MB LRU-capped `redis-server` daemon fallback that allows unlimited simulation ticks without incurring SaaS fees.
 
 ### Cassandra Partitioning Strategy (`infra/cassandra/schema.cql`)
 Cassandra query patterns require table schemas matching the exact queries executed:

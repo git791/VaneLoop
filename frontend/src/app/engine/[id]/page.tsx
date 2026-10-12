@@ -12,14 +12,14 @@ import { AlertTriangle, CheckCircle2, AlertOctagon, Info } from "lucide-react";
 const SENSORS: Array<{ id: keyof Reading; name: string; symbol: string; unit: string }> = [
   { id: "s2", name: "LPC Outlet Temp", symbol: "T24", unit: "°R" },
   { id: "s3", name: "HPC Outlet Temp", symbol: "T30", unit: "°R" },
-  { id: "s4", name: "LPT Outlet Temp", symbol: "T50", unit: "°R" },
-  { id: "s7", name: "HPC Outlet Pressure", symbol: "P30", unit: "psia" },
-  { id: "s8", name: "Physical Fan Speed", symbol: "Nf", unit: "rpm" },
-  { id: "s9", name: "Physical Core Speed", symbol: "Nc", unit: "rpm" },
+  { id: "s4", name: "Exhaust Gas Temp (LPT)", symbol: "T50", unit: "°R" },
+  { id: "s7", name: "Compressor Pressure", symbol: "P30", unit: "psia" },
+  { id: "s8", name: "Physical Fan Speed", symbol: "Nf", unit: "RPM" },
+  { id: "s9", name: "Physical Core Speed", symbol: "Nc", unit: "RPM" },
   { id: "s11", name: "Static Pressure", symbol: "Ps30", unit: "psia" },
   { id: "s12", name: "Fuel/Air Ratio", symbol: "phi", unit: "—" },
-  { id: "s13", name: "Corrected Fan Speed", symbol: "NRf", unit: "rpm" },
-  { id: "s14", name: "Corrected Core Speed", symbol: "NRc", unit: "rpm" },
+  { id: "s13", name: "Corrected Fan Speed", symbol: "NRf", unit: "RPM" },
+  { id: "s14", name: "Corrected Core Speed", symbol: "NRc", unit: "RPM" },
   { id: "s15", name: "Bypass Ratio", symbol: "BPR", unit: "—" },
   { id: "s17", name: "Bleed Enthalpy", symbol: "htBleed", unit: "—" },
   { id: "s20", name: "HPT Coolant Bleed", symbol: "W31", unit: "lbm/s" },
@@ -179,7 +179,7 @@ export default function EngineDetail() {
         <section className="space-y-2">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              Sensor Trajectory: {sensorMeta.symbol} ({sensorMeta.name})
+              Sensor Trajectory: {sensorMeta.name} ({sensorMeta.symbol})
             </h2>
             <select
               value={selectedSensor}
@@ -188,7 +188,7 @@ export default function EngineDetail() {
             >
               {SENSORS.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.symbol} ({s.id}) — {s.name}
+                  {s.name} ({s.symbol})
                 </option>
               ))}
             </select>
@@ -197,7 +197,7 @@ export default function EngineDetail() {
             {chartData.length ? (
               <SensorLineChart
                 data={chartData}
-                sensorLabel={`${sensorMeta.symbol} (${sensorMeta.name})`}
+                sensorLabel={`${sensorMeta.name} (${sensorMeta.symbol})`}
                 unit={sensorMeta.unit}
               />
             ) : (

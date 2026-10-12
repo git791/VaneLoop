@@ -291,54 +291,57 @@ class CassandraStore:
                 return float(val)
             return str(val)
 
-        reading_args = [
-            tuple(_clean_val(c, r.get(c)) for c in READING_COLUMNS)
-            for r in rows
-        ]
-        sensor_args = [
-            (
-                r["dataset"],
-                f"s{i}",
-                cycle_bucket(int(r["cycle"])),
-                int(r["cycle"]),
-                int(r["unit"]),
-                float(r[f"s{i}"]),
-            )
-            for r in rows
-            for i in range(1, 22)
-        ]
-        
         import time
         import logging
         log = logging.getLogger(__name__)
-        
-        chunk_size = 5000
-        for i in range(0, len(reading_args), chunk_size):
+
+        total_inserted = 0
+        batch_size = 1000
+
+        for b_start in range(0, len(rows), batch_size):
+            batch = rows[b_start : b_start + batch_size]
+            reading_args = [
+                tuple(_clean_val(c, r.get(c)) for c in READING_COLUMNS)
+                for r in batch
+            ]
+            sensor_args = [
+                (
+                    r["dataset"],
+                    f"s{i}",
+                    cycle_bucket(int(r["cycle"])),
+                    int(r["cycle"]),
+                    int(r["unit"]),
+                    float(r[f"s{i}"]),
+                )
+                for r in batch
+                for i in range(1, 22)
+            ]
+
             execute_concurrent_with_args(
                 self.session,
                 self._ins_reading,
-                reading_args[i : i + chunk_size],
+                reading_args,
                 concurrency=20,
             )
 
-        for i in range(0, len(sensor_args), chunk_size):
-            chunk = sensor_args[i : i + chunk_size]
             for attempt in range(3):
                 try:
                     execute_concurrent_with_args(
                         self.session,
                         self._ins_sensor,
-                        chunk,
+                        sensor_args,
                         concurrency=20,
                     )
                     break
                 except Exception as e:
                     if attempt == 2:
-                        raise
-                    log.warning("Timeout in chunk, retrying: %s", e)
-                    time.sleep(3.0)
-            time.sleep(0.05)
-        return len(rows)
+                        log.warning("Sensor batch write failed: %s", e)
+                    time.sleep(2.0)
+
+            total_inserted += len(batch)
+            time.sleep(0.01)
+
+        return total_inserted
 
     def insert_engine_reading(self, reading: dict[str, Any]) -> int:
         """Insert one reading (engine_readings row + 21 sensor index rows)."""

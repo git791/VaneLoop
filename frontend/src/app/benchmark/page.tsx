@@ -99,7 +99,11 @@ export default function BenchmarkPage() {
               <tr className="border-b border-border-hairline bg-bg-surface-raised">
                 <th className="p-3">Dataset</th>
                 <th className="p-3">Accuracy</th>
+                <th className="p-3">RMSE (cycles)</th>
+                <th className="p-3">80% Coverage</th>
+                <th className="p-3">NASA Score</th>
                 <th className="p-3">Latency (ms)</th>
+                <th className="p-3">Rows Ingested</th>
                 <th className="p-3">Recorded Timestamp</th>
               </tr>
             </thead>
@@ -108,7 +112,15 @@ export default function BenchmarkPage() {
                 <tr key={b.dataset} className="border-b border-border-hairline">
                   <td className="p-3 font-mono font-bold">{b.dataset}</td>
                   <td className="p-3 font-mono">{(b.accuracy * 100).toFixed(1)}%</td>
+                  <td className="p-3 font-mono">{b.rmse !== undefined ? b.rmse.toFixed(2) : "—"}</td>
+                  <td className="p-3 font-mono">
+                    {b.coverage_80 !== undefined ? `${(b.coverage_80 * 100).toFixed(1)}%` : "—"}
+                  </td>
+                  <td className="p-3 font-mono">
+                    {b.nasa_score !== undefined ? b.nasa_score.toFixed(1) : "—"}
+                  </td>
                   <td className="p-3 font-mono">{b.latency_ms} ms</td>
+                  <td className="p-3 font-mono">{b.rows_inserted ?? "—"}</td>
                   <td className="p-3 font-mono text-muted-foreground">{b.timestamp}</td>
                 </tr>
               ))}

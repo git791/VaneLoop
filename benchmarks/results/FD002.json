@@ -1,6 +1,15 @@
 {
   "dataset": "FD002",
-  "accuracy": 0.94,
-  "latency_ms": 160,
-  "timestamp": "2026-10-03T13:48:00Z"
+  "rows_inserted": 53759,
+  "time_taken": 13.1305,
+  "memory_usage_mb": 177.11,
+  "latency_ms": 4.69,
+  "cold_path_latency_ms": 1.82,
+  "accuracy": 0.8655,
+  "rmse": 23.59,
+  "rmse_uncapped": 31.18,
+  "mae": 16.82,
+  "coverage_80": 0.8726,
+  "nasa_score": 9268.98,
+  "timestamp": "2026-10-13T00:42:55Z"
 }

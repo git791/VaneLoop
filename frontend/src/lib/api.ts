@@ -75,6 +75,13 @@ export interface BenchmarkResult {
   dataset: string;
   accuracy: number;
   latency_ms: number;
+  cold_path_latency_ms?: number;
+  rmse?: number;
+  coverage_80?: number;
+  nasa_score?: number;
+  rows_inserted?: number;
+  time_taken?: number;
+  memory_usage_mb?: number;
   timestamp: string;
 }
 

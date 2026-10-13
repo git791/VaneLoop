@@ -18,7 +18,4 @@ data/raw/
 # Benchmarks/Logs
 logs/
 
-# ML Artifacts
-ml/artifacts/
-
 *.zip

@@ -175,11 +175,12 @@ $$\mathcal{L}_\tau(y, \hat{y}) = \max\left( \tau (y - \hat{y}), (\tau - 1)(y - \
 
 where $\tau \in \{0.10, 0.50, 0.90\}$.
 
-### 3. Feature Engineering Pipeline
+### 3. Feature Engineering Pipeline (`ml/preprocess.py`)
 - **Informative Sensor Selection**: Only the 14 variance-carrying sensors are retained (`s2, s3, s4, s7, s8, s9, s11, s12, s13, s14, s15, s17, s20, s21`). Constant sensors (`s1, s5, s10, s16, s18, s19`) are dropped.
-- **Rolling Window Statistics**: For each sensor $s$, we extract temporal dynamics across sliding windows ($W = 15$ cycles):
-  $$\mu_s(t) = \frac{1}{W} \sum_{k=0}^{W-1} s(t - k), \quad \sigma_s(t) = \sqrt{\frac{1}{W} \sum_{k=0}^{W-1} (s(t-k) - \mu_s(t))^2}$$
-- **Engine-Level Group Splitting**: When training and evaluating, splits are made strictly by **Engine Unit ID** (GroupKFold). Row-level random splits leak trajectory history and are strictly forbidden in industrial prognostics.
+- **Multi-Scale Rolling Window Statistics**: For each sensor $s$, `generate_rolling_features` extracts temporal dynamics (rolling mean and standard deviation) across three multi-scale sliding windows ($W \in \{5, 10, 30\}$ cycles):
+  $$\mu_{s, W}(t) = \frac{1}{W} \sum_{k=0}^{W-1} s(t - k), \quad \sigma_{s, W}(t) = \sqrt{\frac{1}{W - 1} \sum_{k=0}^{W-1} (s(t-k) - \mu_{s, W}(t))^2}$$
+- **Engine-Level Group Splitting**: When training and evaluating (`ml/train.py`), splits are made strictly by **Engine Unit ID** (`GroupShuffleSplit` grouped by `dataset_unit`). Row-level random splits leak trajectory history and are strictly forbidden in industrial prognostics.
+- **ONNX Export (`ml/export.py`)**: All three trained LightGBM quantile regressors (`p10`, `p50`, `p90`) are exported to ONNX format (`ml/artifacts/model_p10.onnx`, `model_p50.onnx`, `model_p90.onnx`) via `skl2onnx` and `onnxmltools` for low-latency CPU inference in `replayer/loop.py`.
 
 ### 4. Rule-Based Alert Engine & Hysteresis (`api/app/policy.py`)
 To prevent alert flickering between Nominal and Warning, transitions use threshold hysteresis and streak counters:
@@ -437,18 +438,24 @@ REPLAY_TICK_MS=2000
 
 ## 📊 Database Schema & Benchmark Verifications
 
-Performance verifications committed under `benchmarks/results/`:
+All model evaluation and storage benchmark metrics are deterministically generated and committed under `benchmarks/results/*.json` and `ml/artifacts/metrics.json`. To reproduce these numbers locally from raw data:
 
-```
-End-to-End Query Latency:
-  Hot-Path Fleet Snapshot (Redis ZSET + HASH):  ~0.8 ms
-  Cold-Path Historical Telemetry (Cassandra Q1): ~14.2 ms
+```bash
+# 1. Train LightGBM quantile models (p10, p50, p90), evaluate on test_FD001..FD004, and export ONNX artifacts
+uv run python -m ml.train
 
-Model Verification (FD001 Last-Cycle Evaluation):
-  RMSE:                                         14.8 cycles
-  80% Uncertainty Band Coverage:                82.4%
-  NASA Asymmetric Score:                        284.1
+# 2. Run storage ingestion & query latency benchmarks and write benchmarks/results/FD001..FD004.json
+uv run python -m benchmarks.runner
 ```
+
+### Verified Results (`benchmarks/results/*.json` & `ml/artifacts/metrics.json`)
+
+| Dataset | Test Engines | Train Rows Ingested | Ingest Time (s) | Fleet Query Latency (ms) | Cold-Path Q1 Latency (ms) | RUL Accuracy (%) | Test RMSE (cycles) | Test MAE (cycles) | 80% Band Coverage | NASA PHM08 Score |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **FD001** | 100 | 20,631 | 6.86 s | 1.99 ms | 2.66 ms | **88.8%** | **20.47** | 14.00 | **85.0%** | 2,095.2 |
+| **FD002** | 259 | 53,759 | 13.13 s | 4.69 ms | 1.82 ms | **86.6%** | **23.59** | 16.82 | **87.3%** | 9,269.0 |
+| **FD003** | 100 | 24,720 | 3.97 s | 2.15 ms | 2.43 ms | **89.8%** | **19.18** | 12.68 | **75.0%** | 2,131.3 |
+| **FD004** | 248 | 61,249 | 14.42 s | 5.33 ms | 2.54 ms | **87.1%** | **22.66** | 16.19 | **85.9%** | 4,077.9 |
 
 ---
 

@@ -1,0 +1,10 @@
+{
+  "version": "1.0.0",
+  "model": "LightGBM Quantile Regressor",
+  "target": "RUL capped at 125",
+  "windows": [
+    5,
+    10,
+    30
+  ]
+}

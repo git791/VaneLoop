@@ -47,16 +47,36 @@ COLS = ["unit", "cycle", "op1", "op2", "op3"] + [f"s{i}" for i in range(1, 22)]
 
 
 def _load_onnx_session(model_dir: str):
-    """Returns an onnxruntime.InferenceSession, or None if not available."""
+    """Returns a dict of onnxruntime.InferenceSession objects (or single session), or None if unavailable."""
     try:
         import onnxruntime as ort  # type: ignore
 
         model_path = os.path.join(model_dir, "model_p50.onnx")
         if os.path.exists(model_path):
             logger.info(f"Loading ONNX model from {model_path}")
-            return ort.InferenceSession(model_path)
+            sessions = {"p50": ort.InferenceSession(model_path)}
+            for q in ("p10", "p90"):
+                q_path = os.path.join(model_dir, f"model_{q}.onnx")
+                if os.path.exists(q_path):
+                    sessions[q] = ort.InferenceSession(q_path)
+            return sessions
     except ImportError:
         logger.warning("onnxruntime not installed — using linear RUL fallback.")
+    return None
+
+
+def _load_feature_cols(model_dir: str) -> list[str] | None:
+    feat_path = os.path.join(model_dir, "features.yaml")
+    if os.path.exists(feat_path):
+        try:
+            import yaml
+
+            with open(feat_path) as f:
+                cols = yaml.safe_load(f)
+            if isinstance(cols, list):
+                return cols
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Could not load features.yaml: %s", exc)
     return None
 
 
@@ -75,7 +95,7 @@ def _linear_rul(cycle: int, max_cycle: int) -> tuple[float, float, float]:
 
 
 class DatasetReplay:
-    def __init__(self, dataset: str, data_path: str):
+    def __init__(self, dataset: str, data_path: str, feature_cols: list[str] | None = None):
         self.dataset = dataset
         self.data_path = data_path
         self.df = pd.read_csv(data_path, sep=r"\s+", header=None, names=COLS)
@@ -88,10 +108,28 @@ class DatasetReplay:
         self.policy = StatusPolicy()
         self.alert_engine = AlertEngine()
 
+        self.features_indexed: pd.DataFrame | None = None
+        if feature_cols:
+            try:
+                from sklearn.preprocessing import StandardScaler
+
+                from ml.preprocess import FD_SENSORS, generate_rolling_features
+
+                scaled_df = self.df.copy()
+                scaler = StandardScaler()
+                scaled_df[FD_SENSORS] = scaler.fit_transform(scaled_df[FD_SENSORS])
+                feat_df = generate_rolling_features(scaled_df, FD_SENSORS)
+                self.features_indexed = feat_df.set_index(["unit", "cycle"])[feature_cols]
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Failed to precompute ONNX features for %s: %s", dataset, exc)
+
 
 def run(dataset: str = "FD001", data_path: str | None = None) -> None:
     datasets = ["FD001", "FD002", "FD003", "FD004"] if dataset.lower() == "all" else [dataset]
     active_replays: list[DatasetReplay] = []
+
+    onnx_session = _load_onnx_session(MODEL_DIR)
+    feature_cols = _load_feature_cols(MODEL_DIR) if onnx_session is not None else None
 
     for ds in datasets:
         ds_path = (
@@ -103,13 +141,11 @@ def run(dataset: str = "FD001", data_path: str | None = None) -> None:
             logger.warning(f"Data file not found for {ds}: {ds_path}. Skipping.")
             continue
         logger.info(f"Loading {ds} from {ds_path} (mode={REPLAY_MODE})")
-        active_replays.append(DatasetReplay(ds, ds_path))
+        active_replays.append(DatasetReplay(ds, ds_path, feature_cols=feature_cols))
 
     if not active_replays:
         logger.error("No valid dataset found to replay.")
         return
-
-    onnx_session = _load_onnx_session(MODEL_DIR)
 
     r = None
     try:
@@ -150,7 +186,36 @@ def run(dataset: str = "FD001", data_path: str | None = None) -> None:
                 sensors: dict[str, float] = {f"s{i}": float(row[f"s{i}"]) for i in range(1, 22)}
 
                 # --- Inference ---
-                rul_p10, rul_p50, rul_p90 = _linear_rul(cycle, dr.max_cycles[unit])
+                if isinstance(onnx_session, dict) and dr.features_indexed is not None:
+                    import numpy as np
+
+                    feat_vec = (
+                        dr.features_indexed.loc[(unit, cycle)]
+                        .to_numpy(dtype=np.float32)
+                        .reshape(1, -1)
+                    )
+                    raw_p50 = float(
+                        onnx_session["p50"].run(None, {"float_input": feat_vec})[0].flatten()[0]
+                    )
+                    rul_p50 = float(np.clip(raw_p50, 0.0, 125.0))
+                    if "p10" in onnx_session and "p90" in onnx_session:
+                        raw_p10 = float(
+                            onnx_session["p10"]
+                            .run(None, {"float_input": feat_vec})[0]
+                            .flatten()[0]
+                        )
+                        raw_p90 = float(
+                            onnx_session["p90"]
+                            .run(None, {"float_input": feat_vec})[0]
+                            .flatten()[0]
+                        )
+                        rul_p10 = float(np.clip(min(raw_p10, rul_p50), 0.0, 125.0))
+                        rul_p90 = float(np.clip(max(raw_p90, rul_p50), 0.0, 140.0))
+                    else:
+                        rul_p10 = max(0.0, rul_p50 - 15.0)
+                        rul_p90 = rul_p50 + 15.0
+                else:
+                    rul_p10, rul_p50, rul_p90 = _linear_rul(cycle, dr.max_cycles[unit])
 
                 # --- Policy ---
                 prev_state = dr.policy.current_state(unit)
